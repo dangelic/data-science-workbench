@@ -1,0 +1,25 @@
+```{r}
+# Read the data from "machine.data" file into retroHardwareRaw and separate it
+retroHardwareRaw <- read.table("machine.data", sep = ",")
+
+# Convert retroHardwareRaw to a data frame
+retroHardware <- as.data.frame(retroHardwareRaw)
+
+# Set variable names for retroHardware columns
+colnames(retroHardware) <- c("Vendor", "Model", "MachineCycleTime", "MinMainMemory", "MaxMainMemory", 
+                             "CacheMemory", "MinChannels", "MaxChannels", "PublishedPerformance", 
+                             "EstimatedPerformance")
+
+# Load the tibble package
+install.packages("tibble")
+library(tibble)
+
+# Convert retroHardware to a tibble
+retroHardware <- as_tibble(retroHardware)
+print(retroHardware)
+
+# Create the "IsIBM" dummy column
+retroHardware$IsIBM <- as.integer(retroHardware$Vendor == "ibm")
+
+# Proportional classes for IBM and not IBM models
+table(retroHardware$IsIBM) / nrow(retroHardware)
