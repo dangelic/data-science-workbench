@@ -83,6 +83,11 @@ tmpStats %>%
   
 <!--
 In summary, the output provides insights into the distribution of observations, the percentage of positive outcomes within each performance class, and the strength of association between the performance class and the positive outcome (IBM). The negative WOE values suggest that all performance classes have a negative impact on the likelihood of being an IBM vendor.
+
+
+NOTE: The likelihood is that low because in all of the approx. 200 entires, only a tiny fraction is actually an IBM model => the "good" rate. My learning here is that WOE is not that good of a measure if the "good" ratings are extremely rare in the dataset. Also, WOE is used to classify actual good and bad labels (e.g. someone defaults a credit or not) in practice I guess... Labeling IBM as "good" is more of a workaround due to the dataset itself (there is no actual "good" or "bad" here).
+
+
 *After the tweek below, the WOE is now positive as every IBM model is now a Highest Performer!
 -->
 
