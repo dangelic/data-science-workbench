@@ -1,25 +1,111 @@
 ```{r}
-# Read the data from "machine.data" file into retroHardwareRaw and separate it
+# Exploration and WOE on the Index of cpu-performance from 30 May 1989 
+
+# Read the data from "machine.data" file into retroHardwareRaw
 retroHardwareRaw <- read.table("machine.data", sep = ",")
 
 # Convert retroHardwareRaw to a data frame
 retroHardware <- as.data.frame(retroHardwareRaw)
 
-# Set variable names for retroHardware columns
 colnames(retroHardware) <- c("Vendor", "Model", "MachineCycleTime", "MinMainMemory", "MaxMainMemory", 
                              "CacheMemory", "MinChannels", "MaxChannels", "PublishedPerformance", 
                              "EstimatedPerformance")
-
-# Load the tibble package
-install.packages("tibble")
+                             
+# install.packages("tibble") 
 library(tibble)
-
-# Convert retroHardware to a tibble
 retroHardware <- as_tibble(retroHardware)
 print(retroHardware)
 
 # Create the "IsIBM" dummy column
-retroHardware$IsIBM <- as.integer(retroHardware$Vendor == "ibm")
+retroHardware$IsIBM <- ifelse(retroHardware$Vendor == "ibm", "yes", "no")
+# retroHardware$IsIBM <- as.integer(retroHardware$Vendor == "ibm")
 
-# Proportional classes for IBM and not IBM models
-table(retroHardware$IsIBM) / nrow(retroHardware)
+# Proportinal classes
+table(retroHardware$IsIBM)/nrow(retroHardware)
+
+summary(retroHardware)
+
+# install.packages("dplyr")
+library(dplyr)
+
+retroHardware <- retroHardware %>% mutate_if(is.integer, as.numeric)
+
+retroHardware <- retroHardware %>% mutate(IsIBM=factor(IsIBM, labels =c("no", "yes")))
+
+# Define the intervals or cut points for the classes
+cut_points <- c(-Inf, 20, 30, 90, 200, Inf)
+
+# Create the class labels for the intervals
+class_labels <- c("Lowest Performer", "Low Performer", "Medium Performer", "High Performer", "Highest Performer")
+
+# Apply the cut function to create the classes
+retroHardware$EstimatedPerformanceClass <- cut(retroHardware$EstimatedPerformance, breaks = cut_points, labels = class_labels)
+
+
+# Calculate WOE
+
+tmpStats <-
+  retroHardware %>%
+  select(
+    EstimatedPerformanceClass, IsIBM
+  ) %>% 
+  group_by(
+    EstimatedPerformanceClass
+  ) %>% 
+  summarize (
+    pctOfTotalObs = length(IsIBM) / nrow(retroHardware),
+    theGoodRateIsIBM = mean(IsIBM == "yes"),
+    WOE = log(sum(IsIBM == "yes") / sum(IsIBM == "no"))
+  )
+  
+  print(tmpStats)
+  
+  barplot(
+    height = tmpStats$theGoodRateIsIBM,
+    names.arg=levels(tmpStats$EstimatedPerformanceClass),
+    xlab="Checking erstimated performance of CPU",
+    ylab="Percentage of goods (is IBM)",
+    main = "Is IBM? ~ Checking estimated CPU performance",
+    ylim=c(0,1)
+  )
+abline(h=0.5, col="darkblue", lty=2, lwd=2)
+
+library(ggplot2)
+tmpStats %>%
+  ggplot(aes(x = EstimatedPerformanceClass, y = theGoodRateIsIBM)) + 
+  geom_col() + 
+  xlab("Checking erstimated performance of CPU") + 
+  ylab("Percentage of goods (is IBM)") + 
+  ggtitle("Is IBM? ~ Checking estimated CPU performance") +
+  ylim(0, 1) + 
+  geom_abline(intercept =  0.5, slope = 0, lty = 2, lwd = 2, col = "darkblue")
+  
+  
+<!--
+In summary, the output provides insights into the distribution of observations, the percentage of positive outcomes within each performance class, and the strength of association between the performance class and the positive outcome (IBM). The negative WOE values suggest that all performance classes have a negative impact on the likelihood of being an IBM vendor.
+*After the tweek below, the WOE is now positive as every IBM model is now a Highest Performer!
+-->
+
+# * Let's tweek this and change history a bit
+retroHardware$EstimatedPerformance[retroHardware$IsIBM == "yes"] <- 99999
+
+# Reassign classes
+retroHardware$EstimatedPerformanceClass <- cut(retroHardware$EstimatedPerformance, breaks = cut_points, labels = class_labels)
+
+# Redo WOE calculations
+tmpStats <-
+  retroHardware %>%
+  select(
+    EstimatedPerformanceClass, IsIBM
+  ) %>% 
+  group_by(
+    EstimatedPerformanceClass
+  ) %>% 
+  summarize (
+    pctOfTotalObs = length(IsIBM) / nrow(retroHardware),
+    theGoodRateIsIBM = mean(IsIBM == "yes"),
+    WOE = log(sum(IsIBM == "yes") / sum(IsIBM == "no"))
+  )
+  
+  print(tmpStats)
+
