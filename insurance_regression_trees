@@ -1,0 +1,110 @@
+# Regression trees + BAGGING & BOOSTING (xgBoost) on insurance dataset obtained from the Machine Learning course website (Spring 2017)
+
+# Code credits to Prof. Weiß (University of Leipzig, Chair "BWL / Nachhaltige Finanzdienstleistungen, insb. Banken" ) 
+# -> I modified the comments and the code in some instances
+
+
+## EXPLORATION AND PREPROCESSING
+- Insurance.csv file is obtained from the Machine Learning course website (Spring 2017) 
+- from Professor Eric Suess at http://www.sci.csueastbay.edu/~esuess/stat6620/#week-6.
+insurance <- read_csv("data/Insurance premia/insurance.csv")
+insurance <- as_tibble(insurance)
+insurance
+
+
+# Do we have NaN values here?
+sum(is.na(insurance))
+
+# Do we have duplicates?
+sum(duplicated(insurance))
+
+# Remove duplicates
+insurance <- insurance %>% unique()
+
+
+# Create training and testing sets
+
+index <- sample(c(1,2), size=nrow(insurance), prob=c(0.8,0.2), replace=TRUE) # sample with replacement from the set {1,2} with probabilities 80 % and 20 %.
+
+xTrain <- insurance[index==1, 1:6]
+yTrain <- insurance$expenses[index==1]
+
+xTest <- insurance[index==2, 1:6]
+yTest <- insurance$expenses[index==2]
+
+# Use cross-validation with k=10 folds
+# meaning that data from the remaining 9 out of 10 folds is used to train the model and the 10th is used for validation (repeat 10x)
+
+trControl <- 
+  trainControl(
+    method  = "cv", 
+    number  = 10, 
+    verboseIter = FALSE
+  )
+  
+set.seed(2021)
+tryCatch(registerDoSEQ()) #unregister parallel backend ... to avoid error
+
+# Train the model
+regressionTree <- train(
+  x=xTrain, 
+  y=yTrain, 
+  method="rpart",
+  tuneLength=100,
+  trControl=trControl, 
+  metric="RMSE"
+)
+print(regressionTree)
+
+
+plot(regressionTree)
+regressionTree$bestTune # bestTune is the cp (complexity parameter) for our model that minimites RMSE (from cv)
+paramOpt <- regressionTree$bestTune
+
+# Two trees with varying cp
+
+optimalTree <- rpart(expenses ~ ., data=insurance, cp=paramOpt)
+rpart.plot(optimalTree, type = 3, clip.right.labs = FALSE, branch = .3, under = TRUE)
+
+# Complexity parameter rises -> tree gets flatter (sinking complexity)
+shallowTree <- rpart(expenses ~ ., data=insurance, cp=10*paramOpt)
+rpart.plot(shallowTree, type = 3, clip.right.labs = FALSE, branch = .3, under = TRUE)
+
+# Evaluating tree model performance
+
+yPredRegressionTree <- predict(regressionTree,newdata=xTest)
+postResample(pred=yPredRegressionTree, obs=yTest) %>% print()
+
+# BAGGING & BOOSTING
+
+# bagging trees
+baggingTree <- train(
+  x=xTrain, 
+  y=yTrain, 
+  method="treebag",
+  tuneLength=100,
+  trControl=trControl, 
+  metric="RMSE"
+)
+yPred<-predict(baggingTree, newdata=xTest)
+postResample(pred=yPred, obs=yTest)
+```
+
+## xgBoost
+```{r, cache=TRUE, warning=FALSE}
+xTrain <- xTrain %>% 
+  select(where(is.numeric))
+xTest <- xTest %>% 
+  select(where(is.numeric))
+
+xgBoostTree <- train(
+  x=xTrain, 
+  y=yTrain, 
+  method="xgbTree",
+  tuneLength=2,
+  trControl=trControl, 
+  metric="RMSE"
+)
+
+yPredXgbTree <- predict(xgBoostTree,newdata=xTest)
+postResample(pred=yPredXgbTree, obs=yTest) %>% round(., 2) %>% print() # inferior performance (e.g., no smoker variable)
