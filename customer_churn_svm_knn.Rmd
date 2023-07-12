@@ -3,6 +3,10 @@
 # Code credits to Prof. Weiß (University of Leipzig, Chair "BWL / Nachhaltige Finanzdienstleistungen, insb. Banken" ) 
 # -> I modified the comments and the code in some instances
 
+# Key-Insights
+- We simply exclude categorial variables
+- We have to scale the features as the models are sensitive to variance
+
 ## DATA EXPLORATION
 
 # Install from CRAN
