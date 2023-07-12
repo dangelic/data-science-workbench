@@ -1,0 +1,209 @@
+# Using classification algorithms KNN and SVM (Linear, Polynomial and Radial Kernal) on a customer attrition dataset
+
+# Code credits to Prof. Weiß (University of Leipzig, Chair "BWL / Nachhaltige Finanzdienstleistungen, insb. Banken" ) 
+# -> I modified the comments and the code in some instances
+
+## DATA EXPLORATION
+
+# Install from CRAN
+install.packages("tidyverse")
+library(readr)
+bankChurners <- read_csv("BankChurners.csv")
+
+# Drop two last columns (according to dataset description at https://www.kaggle.com/sakshigoyal7/credit-card-customers)
+bankChurners<-bankChurners[,1:(ncol(bankChurners)-2)]
+
+any(is.na(bankChurners))
+any(duplicated(bankChurners))
+# Is false 
+
+# See distribution -> it is imbalanced which could have a negative impact on classification
+round(table(bankChurners$Attrition_Flag)/nrow(bankChurners),3)
+barplot(table(bankChurners$Attrition_Flag),col=c("orange","blue"))
+
+# Plot customer_age x on percentage_attrited y -> we see spikes, so age could be a good predictor
+library(dplyr)
+percAge <- 
+  bankChurners %>% 
+  group_by(Customer_Age) %>% 
+  summarize(
+    percentageAttrited=mean(Attrition_Flag=="Attrited Customer")
+  )
+plot(percAge, type="b")
+
+# Grouping of age
+percAgeGrouped <- bankChurners %>%
+  mutate(
+    # 2:8 gives integers from 2-8 (2,3,4, ... , 8)
+    # Multiplying them with 10 makes age groups 20, 30, ... , 80
+    interval=as.numeric(cut(Customer_Age, breaks=10*(2:8))) 
+  ) %>%
+  group_by(interval) %>% # The result is 7 groups (20-29, 30-39, ...)
+  summarize(
+    percentageAttrited=mean(Attrition_Flag=="Attrited Customer")
+  )
+
+plot(
+  # We just plot until the 70-79 age group is reached
+  x=10*(2:7),
+  y=percAgeGrouped$percentageAttrited,
+  xlab="Customer age",
+  ylab="Percentage of attriting customers",
+  type="b",
+  main="Attriting customers ~ customer age"
+)
+
+## DATA PREPARATION: Create training and test (out-of-sample) sets (X and Y sets)
+
+# Obtain the same random seed to reproduce the results
+set.seed(2021)
+
+# Set sample index vector to randomly generate a proportion of 80/20 to include 80% of the data in training and 20% in test data set
+# Index = 1 -> for training data
+# Index = 2 -> for test data
+index <- sample.int(n=2, size=nrow(bankChurners), prob=c(0.8,0.2),replace=TRUE)
+
+# Displays a table that shows the counts of each index value in the index vector. Shows distribution (count of values) for each group.
+table(index)
+
+# Building X sets based on index vector
+xTrain <-
+  bankChurners %>% 
+  select (-c("CLIENTNUM", "Attrition_Flag")) %>% # Exclude especially Attritrion_Flag as this is used for Y sets
+  select(where(is.numeric)) %>% # only include numerics
+  filter(index==1)
+xTest <-
+  bankChurners %>% 
+  select (-c("CLIENTNUM", "Attrition_Flag")) %>% 
+  select(where(is.numeric)) %>% 
+  filter(index == 2)
+  
+  
+# Building Y sets with a factorized Attrition_Flag
+yTrain <- bankChurners$Attrition_Flag[index==1] %>% as.factor()
+yTest <- bankChurners$Attrition_Flag[index==2] %>% as.factor()
+
+
+# Scaling on the training data. This is important so every impact of a variable is normalized and therefore contributes proportionally
+
+# First calculate min and max values for each column (2-Dimension)
+minVec <- apply(xTrain,2,min)
+maxVec <- apply(xTrain,2,max)
+
+# Apply the scaling to training data
+xTrainScaled <- as.data.frame(t(apply(xTrain,1,function(row){(row-minVec)/(maxVec-minVec)})))
+summary(apply(xTrainScaled,2,min))
+summary(apply(xTrainScaled,2,max))
+
+# ... and test data
+xTestScaled <- as.data.frame(t(apply(xTest,1,function(row){(row-minVec)/(maxVec-minVec)})))
+round(summary(apply(xTestScaled,2,min)),4)
+round(summary(apply(xTestScaled,2,max)),4)
+
+## BUILDING MODEL A: KNN k nearest neighbor
+
+# Hyperparameter tuning
+
+# Use PSOCKcluster perform cross validation in parallel
+install.packages("doParallel")
+library(caret)
+# Cross valudation control
+trControl <- trainControl(method  = "cv", number  = 10)
+set.seed(2021)
+library(doParallel)
+cl <- makePSOCKcluster(6) #number of cores/threads
+registerDoParallel(cl)
+knnModel <- train(
+  x=xTrainScaled, 
+  y=yTrain, 
+  method="knn", 
+  tuneGrid=expand.grid(k=1:10), 
+  trControl=trControl, 
+  metric="Accuracy"
+  )
+stopCluster(cl)
+print(knnModel) #optimal number of neighbors
+# Accuracy = (True Positives + True Negatives) / (True Positives + True Negatives + False Positives + False Negatives)
+# Kappa: ranges from -1 to 1, with 1 indicating perfect agreement, 0 indicating agreement due to chance, and values below 0 indicating agreement worse than chance
+# Here, K=6 has the best Accuracy and Kappa
+
+# Apply KNN
+yPredKnn <- predict(knnModel,newdata=xTestScaled)
+
+# Print confusion matrix
+confusionMatrix(data=yPredKnn, reference=yTest)
+
+## BUILDING MODEL B: SVM Support Vector Machine
+
+install.packages("kernlab")
+
+# --- Linear Kernal
+
+set.seed(2021)
+trControl <- trainControl(method  = "cv", number  = 5)
+grid<-expand.grid(C=2^(-5:5))
+
+cl <- makePSOCKcluster(6)
+registerDoParallel(cl)
+
+svmLinear <- 
+  train(
+    x=xTrainScaled, 
+    y=yTrain, 
+    method = "svmLinear",
+    trControl=trControl,
+    # preProcess = c("center", "scale"),
+    tuneGrid = grid#,
+    # tuneLength = 10
+  )
+
+stopCluster(cl)
+print(svmLinear)
+svmLinear$bestTune
+print(svmLinear$finalModel)
+
+# --- Radial Kernal
+
+set.seed(2021)
+cl <- makePSOCKcluster(6)
+registerDoParallel(cl)
+
+svmRadial <- 
+  train(
+    x=xTrainScaled, 
+    y=yTrain, 
+    method = "svmRadial",
+    trControl=trControl,
+    tuneLength = 10)
+
+stopCluster(cl)
+print(svmRadial)
+svmRadial$bestTune
+
+# --- Polynomial Kernal
+
+set.seed(2021)
+cl <- makePSOCKcluster(6)
+registerDoParallel(cl)
+
+svmPoly <- 
+  train(
+   x=xTrainScaled, 
+     y=yTrain, 
+     method = "svmPoly",
+     trControl=trControl,
+     tuneLength = 10
+   )
+ 
+ stopCluster(cl)
+ print(svmPoly)
+ svmPoly$bestTune
+ 
+# Model comparison
+yPredSvmLinear <- predict(svmLinear,newdata=xTestScaled)
+yPredSvmRadial <- predict(svmRadial,newdata=xTestScaled)
+yPredsvmPoly <- predict(svmPoly,newdata=xTestScaled)
+
+print(confusionMatrix(data=yPredSvmLinear, reference=yTest))
+print(confusionMatrix(data=yPredSvmRadial, reference=yTest))
+print(confusionMatrix(data=yPredsvmPoly, reference=yTest))
