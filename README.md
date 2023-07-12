@@ -20,10 +20,12 @@ If you are the author of any code included in this repository and have concerns 
 
 ## Acknowledgements
 
-The following files are derived from the tutorial of Gregor Prof. Weiß (University of Leipzig).
+The following files are derived from the tutorial of Prof. Gregor Weiß (University of Leipzig).
 The lectures - including this tutorial - are available under https://www.youtube.com/@ULFinance in the lecture playlist for AI & ML in Finance.
 - customer_churn_svm_knn.Rmd
 - customer_churn_decision_trees_xgboost.Rmd
 - insurance_regression_trees.Rmd
 - retro_hardware_exploration (here, I heavily altered the tutorials' code to fit my own dataset)
+
+:-)
 - 
