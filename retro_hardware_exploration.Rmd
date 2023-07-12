@@ -1,4 +1,3 @@
-```{r}
 # Exploration and WOE on the Index of cpu-performance from 30 May 1989 
 
 # Read the data from "machine.data" file into retroHardwareRaw
