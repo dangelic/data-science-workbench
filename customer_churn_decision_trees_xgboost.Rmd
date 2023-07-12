@@ -1,0 +1,145 @@
+# Experimenting with Decision Trees on a customer attrition dataset
+
+# Code credits to Prof. Weiß (University of Leipzig, Chair "BWL / Nachhaltige Finanzdienstleistungen, insb. Banken" ) 
+# -> I modified the comments and the code in some instances
+
+# Key-Insights
+- We CAN use categorical features for the trees and ensembles (unlike SVM and KNN)
+- We do NOT need scaling of the features for the trees and ensembles as these models are not sensitive to high variance (unlike SVM and KNN)
+- Trees are not affected by outliers. Data for trees is split using scores which are calculated using the homogeneity of the resultant data points
+
+- HYPERPARAMETER:
+- Trees: complexity cp -> Depth of the tree
+- Cutoff-Level: Propability an entry has to exceed to be classified as the positive class (Threshold)
+# e.g. 0.5, an entry must be more classified 50% or more to the positive class
+
+# Read Data
+# The bankChurners.csv file can be downloaded from [kaggle](https://www.kaggle.com/sakshigoyal7/credit-card-customers/download).
+bankChurners <- read_csv("data/BankChurners.csv")
+
+# Drop two last columns (according to dataset description at https://www.kaggle.com/sakshigoyal7/credit-card-customers)
+bankChurners <- bankChurners %>% select(1:(last_col() - 2))
+
+## PREPROCESSING
+
+set.seed(2021)
+# Set an vector with random indexes
+index<-sample.int(n=2, size=nrow(bankChurners), prob=c(0.8,0.2),replace=TRUE)
+table(index)
+
+# Stuff data to X train and X test data set 80/20
+xTrain <- bankChurners %>%
+  select (-c("CLIENTNUM", "Attrition_Flag")) %>% # Remove CLIENTNUM (no need) and Attrition_Flag (used for Y)
+  filter(index==1)
+
+xTest <- bankChurners %>% 
+  select (-c("CLIENTNUM", "Attrition_Flag")) %>%
+  filter(index==2)
+
+# Stuff Attrition_Flag data to Y train and Y test data set 80/20
+yTrain <- bankChurners$Attrition_Flag[index==1] %>% as.factor()
+yTest <- bankChurners$Attrition_Flag[index==2] %>% as.factor()
+
+## BUILDING REGRESSION TREES
+
+library(caret)
+# Use Cross-Validation
+trControl <- trainControl(method  = "cv", number  = 10)
+
+# Use PSOCK cluster 
+library(doParallel)
+cl <- makePSOCKcluster(6) #number of cores/threads
+registerDoParallel(cl)
+treeModel <- train(
+  x=xTrain, 
+  y=yTrain, 
+  method="rpart",
+  tuneLength=20,  #trees are relatively fast ... so we can consider more possible values.
+  trControl = trControl,
+  metric="Accuracy")
+
+stopCluster(cl)
+
+# Plot gives the Accuracy (cv) based on hyperparameter "complexity cp"
+plot(treeModel) # visualization of the hyperparameter-selection via cross-validation
+print(treeModel)
+bestParam <- treeModel$bestTune
+bestParam
+
+
+## PLOTTING THE FIST DECISION TREE
+install.packages("rpart.plot")
+library(rpart.plot)
+
+treeModel1 <- 
+  rpart(
+    Attrition_Flag ~.,
+    data=bankChurners[index==1,-1],
+    cp=bestParam # Tunes hyperparameter from the tree model
+  )
+  
+  rpart.plot(treeModel1)
+  
+  yPredTree1 <- predict(treeModel, newdata=xTest)
+  confusionMatrix(data=yPredTree1, reference=yTest)
+  
+## Analyze impact of change in complexity parameter
+
+# Higher cp -> less splitting -> simpler model
+
+treeModel2 <- rpart(
+    Attrition_Flag ~.,
+    data=bankChurners[index==1,-1],
+    cp=bestParam*20 # simpler - complexity shrinks if cp is higher
+  )
+
+rpart.plot(treeModel2) 
+
+yPredTree2 <- 
+  ifelse(
+    predict(treeModel2, newdata=xTest)[,1]>0.5, 
+    "Attrited Customer", 
+    "Existing Customer"
+  ) %>% 
+  as.factor()
+  
+confusionMatrix(data=yPredTree2, reference=yTest)
+
+## USING XGBOOST decision trees as comparison
+
+install.packages("xgboost")
+
+trControl <- trainControl(
+  method  = "cv", 
+  number  = 5, # only 5 iterations, because fitting forests is computationally intensive
+  verboseIter = FALSE
+) 
+
+set.seed(2021)
+
+xTrain <- 
+  xTrain %>% 
+  select(where(is.numeric)) # drop numeric values for simplicity. xgBoost has problems with non-numeric data.
+
+xTest <- 
+  xTest %>% 
+  select(where(is.numeric)) 
+
+cl <- makePSOCKcluster(2) 
+registerDoParallel(cl)
+
+xgBoostModel <- train(
+    x=xTrain, 
+    y=yTrain, 
+    method="xgbTree",
+    tuneLength=2, # algorithm has multiple hyperparameters, such that 2^7 parameter combinations are tested.
+    trControl=trControl, 
+    metric="Accuracy"
+  )
+stop(cluster)
+
+print(xgBoostModel) 
+
+yPredXgBoost <- predict(xgBoostModel,newdata=xTest)
+
+print(confusionMatrix(data=yPredXgBoost, reference=yTest))
