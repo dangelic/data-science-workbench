@@ -1,4 +1,4 @@
-# Using classification algorithms KNN and SVM (Linear, Polynomial and Radial Kernal) on a customer attrition dataset
+# Using classification algorithms KNN and SVM (Linear, Polynomial and Radial kernel) on a customer attrition dataset
 
 # Code credits to Prof. Weiß (University of Leipzig, Chair "BWL / Nachhaltige Finanzdienstleistungen, insb. Banken" ) 
 # -> I modified the comments and the code in some instances
@@ -141,7 +141,7 @@ confusionMatrix(data=yPredKnn, reference=yTest)
 
 install.packages("kernlab")
 
-# --- Linear Kernal
+# --- Linear kernel
 
 set.seed(2021)
 trControl <- trainControl(method  = "cv", number  = 5)
@@ -166,7 +166,7 @@ print(svmLinear)
 svmLinear$bestTune
 print(svmLinear$finalModel)
 
-# --- Radial Kernal
+# --- Radial kernel
 
 set.seed(2021)
 cl <- makePSOCKcluster(6)
@@ -184,7 +184,7 @@ stopCluster(cl)
 print(svmRadial)
 svmRadial$bestTune
 
-# --- Polynomial Kernal
+# --- Polynomial kernel
 
 set.seed(2021)
 cl <- makePSOCKcluster(6)
